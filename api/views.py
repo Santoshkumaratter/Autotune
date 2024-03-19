@@ -1,66 +1,33 @@
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
 from rest_framework import status
-import json
-import requests
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.exceptions import AuthenticationFailed
+from .models import GenerationAndCommitRequest
+import uuid
+from django.conf import settings
 
-from api.hr_repo import push_dataset_to_hf
+from .serializer import GenerationAndCommitRequestSerializer
+from .tasks.data import generate_data
 
-logger = logging.getLogger(__name__)
-from api.utils import DataFetcher
+class SampleGenerationView(APIView):
+    permission_classes = [AllowAny]
 
-@api_view(['POST'])
-def generate_data(request):
-    if request.method == 'POST':
-        req_data = json.loads(request.body)
-        task_id = req_data['task_id']
-        openai_key = req_data['openai_key']
-        redis = req_data['redis']
-        req = req_data['request']
+    async def post(self, request, format=None):
+        req_data = request.data
+        openai_key = request.headers.get('X-OpenAI-Key')
 
-        data = {"data": []}
-        try:
-            fetcher = DataFetcher(req, openai_key, redis, task_id)
-            d = fetcher.fetch().result()
-            data["data"] = d
-        except Exception as e:
-            detail = f"Failed to generate data: {str(e)}"
-            redis.hset(
-                task_id, mapping={"status": "Error", "Progress": "None", "Detail": detail}
-            )
-            return Response(detail, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if openai_key is None:
+            raise AuthenticationFailed('X-OpenAI-Key header missing')
 
-        logger.info("Generated %s samples", len(data["data"]))
-        logger.info("Saving data to redis")
-        data["data"] = data["data"][: req.num_samples]
-        detail = {}
-        detail["data"] = data["data"] if len(data["data"]) < 50 else data["data"][:50]
-        redis.hset(
-            task_id, mapping={"status": "Generated", "Detail": json.dumps(detail)}
-        )
-        logger.info("Task %s completed", task_id)
+        serializer = GenerationAndCommitRequestSerializer(data=req_data)
+        serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
 
-        return Response(data, status=status.HTTP_200_OK)
+        generation_request = GenerationAndCommitRequest.objects.create(**validated_data)
 
-@api_view(['POST'])
-def generate_and_push_data(request):
-    if request.method == 'POST':
-        req_data = json.loads(request.body)
-        task_id = req_data['task_id']
-        openai_key = req_data['openai_key']
-        redis = req_data['redis']
-        req = req_data['request']
-        huggingface_key = req_data['huggingface_key']
+        task_id = str(uuid.uuid4())
 
-        data = generate_data(redis, task_id, req, openai_key)
-        redis.hset(
-            task_id,
-            mapping={
-                "status": "Completed",
-                "Progress": "None",
-                "Detail": json.dumps(data),
-            },
-        )
-        push_dataset_to_hf(redis, task_id, req, huggingface_key, data)
+        data = await generate_data(settings.REDIS_POOL, task_id, req_data, openai_key)
 
-        return Response(data, status=status.HTTP_200_OK)
+        return Response({"response": data}, status=status.HTTP_202_ACCEPTED)

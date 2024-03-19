@@ -90,3 +90,4 @@ class ModelData(models.Model):
     save_path = models.CharField(max_length=255)
     task = models.CharField(max_length=20, choices=TASK_CHOICES)
     version = models.CharField(max_length=50, default="main")
+

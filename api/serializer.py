@@ -36,3 +36,18 @@ class ModelDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = ModelData
         fields = '__all__'
+
+
+from rest_framework import serializers
+
+
+class GenerationRequestSerializer(serializers.Serializer):
+    api_key = serializers.CharField(max_length=255)
+    labels = serializers.ListField(child=serializers.CharField())
+    num_samples = serializers.IntegerField()
+    valid_data = serializers.ListField(required=False)
+    invalid_data = serializers.ListField(required=False)
+
+
+class GenerationResponseSerializer(serializers.Serializer):
+    data = serializers.ListField(child=serializers.DictField())

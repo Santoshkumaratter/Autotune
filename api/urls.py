@@ -1,11 +1,10 @@
 from django.contrib import admin
 from django.urls import path
 
-from api.views import *
+from api import views
+from api.views import SampleGenerationView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('generate_data/', generate_data, name='generate_data'),
-    path('generate_and_push_data/', generate_and_push_data, name='generate_and_push_data'),
-
+    path('sample/', SampleGenerationView.as_view(), name='sample-generation'),
 ]
