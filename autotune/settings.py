@@ -28,61 +28,6 @@ INSTALLED_APPS = [
     'api',
     'rest_framework',
 ]
-from django.core.signals import request_started, request_finished
-from django.http import HttpRequest, HttpResponse
-from django.core.handlers.wsgi import WSGIRequest
-from typing import Callable, Awaitable, Union
-import logging
-import time
-import random
-import string
-import aioredis
-from django.conf import settings
-
-logger = logging.getLogger(__name__)
-
-# Redis connection pool
-REDIS_POOL = None
-
-# Redis ko initialize karne ka function
-def initialize_redis_pool():
-    global REDIS_POOL
-    REDIS_POOL = aioredis.from_url("redis://localhost", decode_responses=True)
-
-# Custom middleware for logging HTTP requests
-def log_requests(get_response: Callable) -> Callable:
-    async def middleware(request: Union[WSGIRequest, HttpRequest], next: Callable) -> Awaitable:
-        idem = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        logger.info("rid=%s start request path=%s", idem, request.path)
-        start_time = time.time()
-
-        response = await next(request)
-
-        process_time = (time.time() - start_time) * 1000
-        formatted_process_time = "{0:.2f}".format(process_time)
-        logger.info(
-            "rid=%s completed_in=%sms status_code=%s",
-            idem,
-            formatted_process_time,
-            response.status_code,
-        )
-
-        return response
-
-    return middleware
-
-# Django ka startup event use karke Redis pool ko initialize karein
-def startup_event(sender, **kwargs):
-    initialize_redis_pool()
-
-# Django ka shutdown event use karke Redis pool ko close karein
-def shutdown_event(sender, **kwargs):
-    if REDIS_POOL is not None:
-        REDIS_POOL.close()
-
-# Django settings.py mein startup aur shutdown event ko configure karein
-request_started.connect(startup_event)
-request_finished.connect(shutdown_event)
 
 # Custom middleware ko MIDDLEWARE list mein add karein
 MIDDLEWARE = [
@@ -93,62 +38,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'autotune.settings.log_requests',
 ]
 
-# Redis ko use karne ke liye REDIS_POOL ko import karein
-from django.conf import settings
-
-# Django ka startup event use karke Redis pool ko initialize karein
-def startup_event(sender, **kwargs):
-    initialize_redis_pool()
-
-# Django ka shutdown event use karke Redis pool ko close karein
-def shutdown_event(sender, **kwargs):
-    if REDIS_POOL is not None:
-        REDIS_POOL.close()
-
-# Django settings.py mein startup aur shutdown event ko configure karein
-from django.core.signals import request_started, request_finished
-
-request_started.connect(startup_event)
-request_finished.connect(shutdown_event)
-
-# Custom middleware for logging HTTP requests
-import logging
-import time
-import random
-import string
-from django.http import HttpRequest
-from django.core.handlers.wsgi import WSGIRequest
-from typing import Callable
-from typing import Awaitable
-from typing import Union
-
-logger = logging.getLogger(__name__)
-
-def log_requests(get_response: Callable) -> Callable:
-    async def middleware(request: Union[WSGIRequest, HttpRequest], next: Callable) -> Awaitable:
-        idem = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        logger.info("rid=%s start request path=%s", idem, request.path)
-        start_time = time.time()
-
-        response = await next(request)
-
-        process_time = (time.time() - start_time) * 1000
-        formatted_process_time = "{0:.2f}".format(process_time)
-        logger.info(
-            "rid=%s completed_in=%sms status_code=%s",
-            idem,
-            formatted_process_time,
-            response.status_code,
-        )
-
-        return response
-
-    return middleware
-
-MIDDLEWARE.insert(0, 'autotune.settings.log_requests')
 
 ASGI_APPLICATION = 'autotune.asgi.application'
 
@@ -172,18 +63,18 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'autotune.wsgi.application'
+# Import the os module
+import os
 
-# Database
-# https://docs.djangoproject.com/en/3.2/ref/settings/#databases
-
+# Database settings
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgress',
-        'USER': 'postgres',
-        'PASSWORD': 'root',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'ENGINE': 'django.db.backends.postgresql',  # Database engine
+        'NAME': 'postgres',              # Database name
+        'USER': 'postgres',              # Database user
+        'PASSWORD': 'root',      # Database password
+        'HOST': 'localhost',                       # Database host
+        'PORT': '5432',                            # Database port
     }
 }
 
@@ -228,63 +119,5 @@ STATIC_URL = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Redis connection pool
-REDIS_POOL = None
-
-# Redis ko initialize karne ka function
-def initialize_redis_pool():
-    global REDIS_POOL
-    REDIS_POOL = aioredis.from_url("redis://localhost", decode_responses=True)
-
-def startup_event(sender, **kwargs):
-    initialize_redis_pool()
-
-# Django ka shutdown event use karke Redis pool ko close karein
-def shutdown_event(sender, **kwargs):
-    if REDIS_POOL is not None:
-        REDIS_POOL.close()
-
-# Django settings.py mein startup aur shutdown event ko configure karein
-from django.core.signals import request_started, request_finished
-
-request_started.connect(startup_event)
-request_finished.connect(shutdown_event)
-
-# Custom middleware for logging HTTP requests
-import logging
-import time
-import random
-import string
-from django.http import HttpRequest
-from django.core.handlers.wsgi import WSGIRequest
-from typing import Callable
-from typing import Awaitable
-from typing import Union
-from typing import Optional
-
-logger = logging.getLogger(__name__)
-
-def log_requests(get_response: Callable) -> Callable:
-    async def middleware(request: Union[WSGIRequest, HttpRequest], next: Callable) -> Awaitable:
-        idem = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        logger.info("rid=%s start request path=%s", idem, request.path)
-        start_time = time.time()
-
-        response = await next(request)
-
-        process_time = (time.time() - start_time) * 1000
-        formatted_process_time = "{0:.2f}".format(process_time)
-        logger.info(
-            "rid=%s completed_in=%sms status_code=%s",
-            idem,
-            formatted_process_time,
-            response.status_code,
-        )
-
-        return response
-
-    return middleware
-
-MIDDLEWARE.insert(0, 'autotune.settings.log_requests')
-
-ASGI_APPLICATION = 'autotune.asgi.application'
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
