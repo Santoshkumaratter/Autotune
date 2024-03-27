@@ -19,34 +19,32 @@ from .serializer import *
 
 
 logger = logging.getLogger(__name__)
+
+import redis
+
 class SampleGenerationView(APIView):
     authentication_classes = [SessionAuthentication, BasicAuthentication]
 
     def post(self, request):
-        # Check if 'split' is provided and parse it as a list of integers
-        split_str = request.data.get('split')
-        if split_str:
-            try:
-                # Attempt to parse 'split' as a list of integers
-                split = json.loads(split_str)
-                if not isinstance(split, list):
-                    raise ValueError("Invalid 'split' format")
-                split = [int(value) for value in split]
-            except (json.JSONDecodeError, ValueError):
-                return Response({"split": ["Invalid format for 'split'. Expected a list of integers."]}, status=400)
-        else:
-            split = []
+        print("Request data:", request.data)
+        split_choices = [choice[0] for choice in GenerationAndCommitRequest.SPLIT_CHOICES]
+        if 'split' in request.data and request.data['split'] not in split_choices:
+            return Response({"split": ["Invalid choice for 'split'."]}, status=400)
 
         serializer = GenerationAndCommitRequestSerializer(data=request.data)
         if serializer.is_valid():
+            print("Serializer is valid")
             task_id = str(uuid.uuid4())
-            redis_pool = aioredis.from_url("redis://localhost", decode_responses=True)
-            redis_pool.hset(
+            print("Task ID:", task_id)
+            redis_client = redis.Redis(host='localhost', port=6379, db=0)
+            redis_client.hset(
                 task_id, mapping={"status": "Starting", "Progress": "None", "Detail": "None"}
             )
-            GenerateDataView.apply_async(args=[redis_pool, task_id, serializer.validated_data])
+
+            # GenerateDataView.apply_async(args=[redis_pool, task_id, serializer.validated_data])
             return Response({"task_id": task_id}, status=202)
         else:
+            print("Serializer errors:", serializer.errors)  # Print serializer errors for debugging
             return Response(serializer.errors, status=400)
 
 
