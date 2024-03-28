@@ -1,5 +1,11 @@
 from django.db import models
 
+from django.core.exceptions import ValidationError
+
+def validate_split_choice(value):
+    valid_choices = [choice[0] for choice in GenerationAndCommitRequest.SPLIT_CHOICES]
+    if value not in valid_choices:
+        raise ValidationError(f"'{value}' is not a valid choice for 'split'.")
 
 class GenerationAndCommitRequest(models.Model):
     SPLIT_CHOICES = [
@@ -10,7 +16,7 @@ class GenerationAndCommitRequest(models.Model):
 
     num_samples = models.IntegerField()
     repo = models.CharField(max_length=255)
-    split = models.CharField(max_length=20, choices=SPLIT_CHOICES, default='train')
+    split = models.CharField(max_length=20, validators=[validate_split_choice], default='train')
     labels = models.JSONField(null=True, blank=True)
     valid_data = models.JSONField(null=True, blank=True)
     invalid_data = models.JSONField(null=True, blank=True)

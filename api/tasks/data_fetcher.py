@@ -1,23 +1,24 @@
 import asyncio
-import json
 import logging
-import coloredlogs
-from typing import Union
-from rest_framework.response import Response
+import json
 from rest_framework.views import APIView
-from ..models import GenerationAndCommitRequest, QuestionCreationRequest
+from ..models import GenerationAndCommitRequest
 
 logger = logging.getLogger(__name__)
-coloredlogs.install(logger=logger)
-logger.propagate = False
+logger.setLevel(logging.INFO)
 
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+handler.recursion_depth = 100
+
+logger.addHandler(handler)
 
 class DataFetcher(APIView):
     MAX_CONCURRENT_FETCHES = 10
-
+    MAX_ITERATION_LIMIT = 15
     def __init__(
             self,
-            req: Union[GenerationAndCommitRequest, QuestionCreationRequest],
+            req: GenerationAndCommitRequest,
             openai_key,
             redis,
             task_id,
@@ -34,7 +35,8 @@ class DataFetcher(APIView):
         self.questions = questions
 
     async def _initialize_from_redis(self):
-        existing_data = await self.redis.hgetall(self.task_id)
+        loop = asyncio.get_running_loop()
+        existing_data = await loop.run_in_executor(None, self.redis.hgetall, self.task_id)
         if existing_data and "data" in existing_data:
             self.data = json.loads(existing_data.get("data", self.data))
             logger.info("Found existing data for task %s", self.task_id)
@@ -101,7 +103,12 @@ class DataFetcher(APIView):
         await self._initialize_from_redis()
         tasks = []
         batch_size = 20
-        num_samples = self.req.num_samples
+
+        if 'num_samples' not in self.req:
+            logger.error("Request data does not contain 'num_samples' attribute")
+            return
+
+        num_samples = self.req['num_samples']
         num_batches = max(
             1, (num_samples - len(self.data["data"]) + batch_size - 1) // batch_size
         )
@@ -122,10 +129,16 @@ class DataFetcher(APIView):
                 self.task_id,
             )
             self.iteration += 1
-            await self._fetch_data()
+            if self.iteration < self.MAX_ITERATION_LIMIT:
+                await self._fetch_data()
+            else:
+                logger.warning("Maximum iteration limit reached. Terminating fetching.")
 
     async def fetch(self):
+        if 'num_samples' not in self.req:
+            logger.error("Request data does not contain 'num_samples' attribute")
+            return
+
         await self._fetch_data()
         logger.info("Total samples downloaded %d", len(self.data["data"]))
         logger.info("All Data Fetched - Returning data")
-        return self.data["data"]

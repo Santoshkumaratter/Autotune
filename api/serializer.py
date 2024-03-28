@@ -1,11 +1,17 @@
 from rest_framework import serializers
 from api.models import *
 
-
 class GenerationAndCommitRequestSerializer(serializers.ModelSerializer):
+    split = serializers.ChoiceField(choices=GenerationAndCommitRequest.SPLIT_CHOICES)
+
     class Meta:
         model = GenerationAndCommitRequest
         fields = '__all__'
+    def validate_split(self, value):
+        valid_choices = [choice[0] for choice in GenerationAndCommitRequest.SPLIT_CHOICES]
+        if value not in valid_choices:
+            raise serializers.ValidationError(f"'{value}' is not a valid choice for 'split'.")
+        return value
 
 
 class GenerationAndUpdateRequestSerializer(serializers.ModelSerializer):
@@ -38,7 +44,6 @@ class ModelDataSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-from rest_framework import serializers
 
 
 class GenerationRequestSerializer(serializers.Serializer):
